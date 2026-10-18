@@ -29,55 +29,55 @@ RSSHub 的路由是 **TypeScript 源码**，不是运行时配置。它们必须
 
 ---
 
-## 三、完整步骤
+## 三、完整步骤（两步搞定，不再需要 scp）
 
-### 第 1 步：本机导出路由包
+自定义路由已作为**源码目录**放进仓库（`routes/`），服务器 clone 仓库即可拿到，
+不需要再手工打包上传。
+
+```
+../routes/
+├── COMMIT              # RSSHub 版本锚点
+├── MANIFEST.txt
+└── lib/routes/
+    ├── {caac,caacnews,mct,nia,atmb,ctaweb,traveldaily}/   # 7 个新增命名空间
+    ├── bendibao/news.ts                                   # 修复版
+    └── nbd/index.ts                                       # 修复版
+```
+
+> **为什么用目录而不是 tar.gz**：`.ts` 是纯文本，放目录可 diff、可 review；
+> 而且 **git 不会产生 macOS 的 `._` AppleDouble 文件**，
+> 直接消灭了那个让 esbuild 崩溃的坑（详见「故障排查」）。
+
+### 第 1 步：服务器上 clone 仓库
 
 ```bash
-cd /Users/karenmok/WorkBuddy/2026-09-18-09-55-46/server-deploy
-bash export-routes.sh
+sudo git clone https://github.com/Karen-Mok/rsshub-i2v.git /opt/rsshub-i2v
+cd /opt/rsshub-i2v/server-deploy
 ```
 
-产出 `rsshub-routes-<日期>.tar.gz`，内含：
+> ⚠️ 必须 clone **整个仓库**（脚本会自动去找 `../routes/`）。
+> 只下载单个 `deploy.sh` 会找不到路由而报错退出。
 
-```
-routes/lib/routes/{caac,caacnews,mct,nia,atmb,ctaweb,traveldaily}/{namespace.ts,index.ts|xwzx.ts}
-routes/lib/routes/bendibao/news.ts      # 修复版
-routes/lib/routes/nbd/index.ts          # 修复版
-COMMIT                                   # 本地 RSSHub 版本锚点（本次为 bf9504c045f4...）
-MANIFEST.txt
-```
-
-> **为什么要 COMMIT 锚点**：RSSHub 上游改动频繁，路由 API 可能变化。
-> 服务器必须 checkout 到同一个 commit，本地验证过的路由才能原样跑起来。
-
-### 第 2 步：上传到服务器
+### 第 2 步：执行部署
 
 ```bash
-scp rsshub-routes-<日期>.tar.gz root@<服务器IP>:/tmp/
-scp deploy.sh                   root@<服务器IP>:/tmp/
-```
-
-### 第 3 步：服务器执行部署
-
-```bash
-ssh root@<服务器IP>
-sudo bash /tmp/deploy.sh
+sudo bash deploy.sh
 ```
 
 脚本会自动完成：
 
-1. 安装 Node.js 22.22.2（若已有 22+ 则跳过）
-2. 安装 pnpm 10.34.5
-3. 克隆 RSSHub 并 checkout 到匹配的 commit
-4. 覆盖 16 个路由文件
-5. `pnpm install`（用 npmmirror 镜像加速）
-6. `pnpm build`
+1. 定位 `../routes/` 自定义路由，读取 `COMMIT` 版本锚点
+2. 安装 Node.js 22.22.2（若已有符合版本则跳过）
+3. 安装 pnpm 10.34.5
+4. 克隆 RSSHub 并 checkout 到匹配的 commit
+5. 覆盖 16 个路由文件
+6. `pnpm install`（npmmirror 镜像加速）
+7. `pnpm build`
 7. 写入 `.env`（端口、内存缓存、跨域等）
 8. 创建 `rsshub` 系统用户 + systemd 服务
 9. 启动并**逐条验证 9 个自定义路由**
 
-### 第 4 步：放行端口
+### 第 3 步：放行端口
 
 ```bash
 # CentOS / Rocky / AlmaLinux
@@ -89,7 +89,7 @@ ufw allow 1200/tcp
 
 云服务器还需在**安全组**里放行 1200（或 Nginx 的 443）。
 
-### 第 5 步：验证
+### 第 4 步：验证
 
 ```bash
 # 本机
@@ -98,6 +98,9 @@ curl "http://<服务器IP>:1200/caac/xwzx/mhyw?limit=5"
 # 服务器上
 curl "http://127.0.0.1:1200/nia/tzgg?limit=5"
 ```
+
+> 境外服务器（Vultr / AWS 海外区等）可能有部分国内政务站点连不上，
+> 这是网络层问题、改代码无解。先跑 `bash diag.sh` 判断。
 
 ---
 
@@ -118,8 +121,19 @@ journalctl -u rsshub -n 100 --no-pager   # 最近 100 行
 ### 改端口 / 改安装目录
 
 ```bash
-sudo bash /tmp/deploy.sh --port 8080 --dir /data/rsshub
+sudo bash deploy.sh --port 8080 --dir /data/rsshub
 ```
+
+其他常用参数：
+
+```bash
+sudo bash deploy.sh --rebuild      # 强制重装依赖 + 重新构建
+sudo bash deploy.sh --skip-node    # 已有 Node 22.22.2+ 时跳过安装
+sudo bash deploy.sh --no-systemd   # 容器环境：不装 systemd，用后台进程
+```
+
+> 脚本是**幂等**的：已装好依赖、已构建过会自动跳过，重跑很快。
+> 改了路由文件后要加 `--rebuild`（否则不会重新构建）。
 
 ### 生产环境加固（建议）
 
@@ -139,21 +153,16 @@ sudo nginx -t && sudo systemctl reload nginx
 升级会导致自定义路由**部分丢失**，必须按下面的顺序操作：
 
 ```bash
-cd /opt/rsshub
-git checkout master
-git pull
+# 1) 拉最新的自定义路由
+cd /opt/rsshub-i2v && git pull
 
-# 重新应用自定义路由
-tar -xzf /tmp/rsshub-routes-<日期>.tar.gz -C /tmp/restore --strip-components=0
-cp -r /tmp/restore/routes/. /opt/rsshub/
-
-# 重新构建
-pnpm --config.managePackageManagerVersions=false install
-pnpm --config.managePackageManagerVersions=false build
-
-chown -R rsshub:rsshub /opt/rsshub
-systemctl restart rsshub
+# 2) 更新 RSSHub 上游（注意：会覆盖掉修改过的官方路由，见下表）
+#    若要升级上游版本，先改 routes/COMMIT 里的锚点，再重跑部署
+cd /opt/rsshub-i2v/server-deploy
+sudo bash deploy.sh --rebuild
 ```
+
+`deploy.sh --rebuild` 会重新走完整流程（应用路由 → 装依赖 → 构建 → 重启 → 验证）。
 
 **哪些会丢：**
 
@@ -169,10 +178,10 @@ systemctl restart rsshub
 ## 六、Docker 方案（备选）
 
 ```bash
-# 服务器上准备好目录结构
+# 服务器上准备好目录结构（本仓库已 clone 到 /opt/rsshub-i2v）
 mkdir -p /opt/rsshub-docker && cd /opt/rsshub-docker
 git clone --depth=1 https://github.com/DIYgod/RSSHub.git RSSHub
-tar -xzf /tmp/rsshub-routes-<日期>.tar.gz -C /tmp && cp -r /tmp/routes/. RSSHub/
+cp -r /opt/rsshub-i2v/routes/. RSSHub/     # 用仓库里的路由目录
 
 # 拷贝本目录的 Dockerfile.custom 与 docker-compose.yml 到此
 docker compose up -d --build

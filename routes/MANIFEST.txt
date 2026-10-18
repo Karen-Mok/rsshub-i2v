@@ -1,0 +1,16 @@
+同步时间: 2026-10-18 21:28:47
+RSSHub commit: bf9504c045f4213304bf712145e652c3584de8dc
+路由数量: 7 个新增命名空间 + 2 个修改的官方路由
+
+新增命名空间:
+  caac          中国民用航空局     /caac/xwzx/:channel
+  caacnews      中国民航网         /caacnews/:channel
+  mct           文化和旅游部       /mct/:category
+  nia           国家移民管理局     /nia/tzgg
+  atmb          民航局空管局       /atmb
+  ctaweb        中国旅游研究院     /ctaweb
+  traveldaily   环球旅讯           /traveldaily/:channel
+
+修改的官方路由:
+  bendibao/news.ts   本地宝（修复失效选择器）
+  nbd/index.ts       每日经济新闻（修复失效选择器）
