@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.rsshub.local</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>/Users/karenmok/WorkBuddy/2026-09-18-09-55-46/rsshub-run.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/karenmok/WorkBuddy/2026-09-18-09-55-46/RSSHub</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/karenmok/WorkBuddy/2026-09-18-09-55-46/RSSHub/logs/launchd-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/karenmok/WorkBuddy/2026-09-18-09-55-46/RSSHub/logs/launchd-stderr.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

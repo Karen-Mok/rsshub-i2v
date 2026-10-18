@@ -1,0 +1,62 @@
+# ============================================================
+# RSSHub 自定义镜像（Docker 备选方案）
+#
+# 为什么不能用官方镜像：自定义路由是 TypeScript 源码，
+# 必须参与构建（build）才能打包进 dist，所以要自行 build 镜像。
+#
+# 用法：把本文件放在含 RSSHub/ 源码目录的同级，然后：
+#   docker build -f Dockerfile.custom -t rsshub-custom:latest .
+# ============================================================
+
+# ---- 阶段 1：构建 ----
+FROM node:22.22.2-bookworm-slim AS builder
+
+WORKDIR /app
+
+# 先复制依赖清单，利用 Docker 层缓存
+COPY RSSHub/package.json RSSHub/pnpm-lock.yaml ./
+
+RUN npm install -g pnpm@10.34.5 --registry=https://registry.npmmirror.com \
+    && pnpm config set registry https://registry.npmmirror.com
+
+# 关键：禁掉版本自动管理，否则每条 pnpm 命令会卡 ~300 秒
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    CI=true
+
+RUN pnpm install --frozen-lockfile \
+    --config.managePackageManagerVersions=false \
+    --config.updateNotifier=false
+
+# 再复制源码（含自定义路由）
+COPY RSSHub/ ./
+
+RUN pnpm build \
+    --config.managePackageManagerVersions=false \
+    --config.updateNotifier=false
+
+# ---- 阶段 2：运行 ----
+FROM node:22.22.2-bookworm-slim
+
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    PORT=1200 \
+    LISTEN_INADDR_ANY=1 \
+    CACHE_TYPE=memory \
+    CACHE_EXPIRE=1800 \
+    MEMORY_MAX=512 \
+    LOGGER_LEVEL=info \
+    NO_LOGFILES=true \
+    TZ=Asia/Shanghai
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./package.json
+
+EXPOSE 1200
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||1200)+'/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+
+CMD ["node", "dist/index.mjs"]

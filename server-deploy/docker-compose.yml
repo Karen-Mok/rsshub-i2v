@@ -1,0 +1,55 @@
+# ============================================================
+# Docker Compose（备选方案）
+#
+# 用法：
+#   1) 把 Dockerfile.custom、docker-compose.yml 与 RSSHub/ 源码目录放同级
+#   2) docker compose up -d --build
+#   3) curl http://127.0.0.1:1200/caac/xwzx/mhyw?limit=5
+# ============================================================
+
+services:
+  rsshub:
+    build:
+      context: .
+      dockerfile: Dockerfile.custom
+    image: rsshub-custom:latest
+    container_name: rsshub
+    restart: unless-stopped
+    ports:
+      - "1200:1200"
+    environment:
+      PORT: 1200
+      LISTEN_INADDR_ANY: 1
+      CACHE_TYPE: memory
+      CACHE_EXPIRE: 1800
+      MEMORY_MAX: 512
+      LOGGER_LEVEL: info
+      NO_LOGFILES: "true"
+      TZ: Asia/Shanghai
+      # 抓取被墙站点时打开（按需）
+      # PROXY_URI: http://host.docker.internal:7890
+      # PROXY_URL_REGEX: .
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:1200/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 可选：Redis 缓存（长期运行建议替代内存缓存）
+  # 启用后需把 rsshub 的 CACHE_TYPE 改为 redis、REDIS_URL 改为 redis://redis:6379
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: rsshub-redis
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis-data:/data
+  #   command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+# volumes:
+#   redis-data:
